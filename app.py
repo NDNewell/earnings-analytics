@@ -73,6 +73,46 @@ def analyze_most_revenue_by_time(dataframe):
     return earnings_by_day, earnings_by_hour, earnings_by_hour_for_each_day_dict
 
 
+def sum_earnings_in_four_hour_block(hourly_earnings, start_hour):
+    total = 0
+    for hour in range(start_hour, start_hour + 4):
+        total += hourly_earnings.get(str(hour), 0)
+    return total
+
+
+def get_top_two_four_hour_blocks(dataframe):
+    top_two_blocks = {}
+    for day in days_of_week.values():
+        hourly_earnings = dataframe.get(day, {})
+        best_blocks = [(-1, -float("inf")), (-1, -float("inf"))]
+        for hour in range(24 - 3):
+            earnings = sum_earnings_in_four_hour_block(hourly_earnings, hour)
+            if earnings > best_blocks[0][1]:
+                if best_blocks[1][0] == -1 or abs(hour - best_blocks[1][0]) >= 4:
+                    best_blocks[1] = best_blocks[0]
+                    best_blocks[0] = (hour, earnings)
+                elif (
+                    earnings > best_blocks[1][1] and abs(hour - best_blocks[0][0]) >= 4
+                ):
+                    best_blocks[1] = (hour, earnings)
+            elif earnings > best_blocks[1][1] and abs(hour - best_blocks[0][0]) >= 4:
+                best_blocks[1] = (hour, earnings)
+
+        top_two_blocks[day] = {
+            "1st_block": {
+                "start_hour": best_blocks[0][0],
+                "end_hour": best_blocks[0][0] + 4,  # Round up the end_hour
+                "earnings": best_blocks[0][1],
+            },
+            "2nd_block": {
+                "start_hour": best_blocks[1][0],
+                "end_hour": best_blocks[1][0] + 4,  # Round up the end_hour
+                "earnings": best_blocks[1][1],
+            },
+        }
+    return top_two_blocks
+
+
 @app.route("/analyze-data")
 def analyze_data():
     endpoint = "http://localhost:5000/earnings"
@@ -100,6 +140,10 @@ def analyze_data():
                 str(hour): value for hour, value in hourly_earnings.items()
             }
 
+        top_two_four_hour_blocks = get_top_two_four_hour_blocks(
+            earnings_by_hour_for_each_day_formatted
+        )
+
         return jsonify(
             {
                 "top_revenue_per_mile": top_revenue_per_mile_json,
@@ -107,6 +151,7 @@ def analyze_data():
                 "earnings_by_day": earnings_by_day_json,
                 "earnings_by_hour": earnings_by_hour_json,
                 "earnings_by_hour_for_each_day": earnings_by_hour_for_each_day_formatted,
+                "top_two_four_hour_blocks": top_two_four_hour_blocks,
             }
         )
     else:
