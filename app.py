@@ -9,7 +9,6 @@ app = Flask(__name__)
 def preprocess_data(data):
     df = pd.DataFrame(data)
     df["distance"] = pd.to_numeric(df["distance"], errors="coerce")
-    df["distance"].fillna(0, inplace=True)
     df["duration_in_seconds"] = (
         pd.to_timedelta(df["duration"]).dt.total_seconds().astype("int64")
     )
@@ -20,10 +19,12 @@ def preprocess_data(data):
 
 
 def analyze_top_revenue_per_mile(dataframe, top_n=5):
+    dataframe = dataframe[dataframe["distance"] > 0]
     return dataframe.nlargest(top_n, "revenue_per_mile")
 
 
 def analyze_top_revenue_per_minute(dataframe, top_n=5):
+    dataframe = dataframe[dataframe["duration_in_seconds"] > 0]
     return dataframe.nlargest(top_n, "revenue_per_minute")
 
 
