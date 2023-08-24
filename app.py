@@ -6,6 +6,18 @@ from datetime import datetime as dt
 app = Flask(__name__)
 
 
+# create days of week dictionary and make it global
+days_of_week = {
+    0: "Monday",
+    1: "Tuesday",
+    2: "Wednesday",
+    3: "Thursday",
+    4: "Friday",
+    5: "Saturday",
+    6: "Sunday",
+}
+
+
 def preprocess_data(data):
     df = pd.DataFrame(data)
     df["distance"] = pd.to_numeric(df["distance"], errors="coerce")
@@ -44,12 +56,21 @@ def analyze_most_revenue_by_time(dataframe):
         / dataframe.groupby(["day_of_week", "hour"])["date_requested"].nunique()
     )
 
-    # Convert MultiIndex to single index with day and hour concatenated
-    earnings_by_hour_for_each_day.index = [
-        f"{day}-{hour}" for day, hour in earnings_by_hour_for_each_day.index
-    ]
-
-    return earnings_by_day, earnings_by_hour, earnings_by_hour_for_each_day
+    earnings_by_day.index = [days_of_week[day] for day in earnings_by_day.index]
+    # Sort the earnings_by_day dataframe by the correct order of days of the week
+    earnings_by_day.sort_index(
+        key=lambda x: x.map({day: i for i, day in enumerate(days_of_week.values())}),
+        inplace=True,
+    )
+    # Refactor the earnings_by_hour_for_each_day dataframe
+    earnings_by_hour_for_each_day_dict = {
+        days_of_week[day]: {
+            str(hour): earnings_by_hour_for_each_day.loc[day, hour]
+            for hour in earnings_by_hour_for_each_day.loc[day].index
+        }
+        for day in earnings_by_hour_for_each_day.index.levels[0]
+    }
+    return earnings_by_day, earnings_by_hour, earnings_by_hour_for_each_day_dict
 
 
 @app.route("/analyze-data")
@@ -64,14 +85,20 @@ def analyze_data():
         (
             earnings_by_day,
             earnings_by_hour,
-            earnings_by_hour_for_each_day,
+            earnings_by_hour_for_each_day_dict,
         ) = analyze_most_revenue_by_time(dataframe)
 
         top_revenue_per_mile_json = top_revenue_per_mile.to_dict(orient="records")
         top_revenue_per_minute_json = top_revenue_per_minute.to_dict(orient="records")
         earnings_by_day_json = earnings_by_day.to_dict()
         earnings_by_hour_json = earnings_by_hour.to_dict()
-        earnings_by_hour_for_each_day_json = earnings_by_hour_for_each_day.to_dict()
+
+        earnings_by_hour_for_each_day_formatted = {}
+        for day, hourly_earnings in earnings_by_hour_for_each_day_dict.items():
+            day_name = days_of_week.get(day, day)  # Use 'get' method to avoid KeyError
+            earnings_by_hour_for_each_day_formatted[day_name] = {
+                str(hour): value for hour, value in hourly_earnings.items()
+            }
 
         return jsonify(
             {
@@ -79,7 +106,7 @@ def analyze_data():
                 "top_revenue_per_minute": top_revenue_per_minute_json,
                 "earnings_by_day": earnings_by_day_json,
                 "earnings_by_hour": earnings_by_hour_json,
-                "earnings_by_hour_for_each_day": earnings_by_hour_for_each_day_json,
+                "earnings_by_hour_for_each_day": earnings_by_hour_for_each_day_formatted,
             }
         )
     else:
